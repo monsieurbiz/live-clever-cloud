@@ -1,0 +1,104 @@
+name: Pipeline
+
+on:
+    push:
+        branches: [ main ]
+    pull_request:
+        branches: [ main ]
+
+concurrency:
+    group: ${{ github.head_ref || github.ref }}
+    cancel-in-progress: true
+
+jobs:
+
+    tests:
+
+        name: Tests (PHP ${{ matrix.app }} ${{ matrix.php }})
+
+        runs-on: ubuntu-latest
+
+        strategy:
+            fail-fast: false
+            matrix:
+                php: [ '8.4' ]
+                app: [ 'sylius' ]
+                node: ['20']
+
+        env:
+            COMPOSER_ARGS: --prefer-dist
+            DOCKER_INTERACTIVE_ARGS: -t
+            NODE_AUTH_TOKEN: ${{ github.token }}
+
+        steps:
+            -   uses: actions/checkout@v4
+
+            -   uses: actions/setup-node@v2
+                with:
+                    node-version: ${{ matrix.node }}
+
+            -   name: Setup PHP
+                uses: shivammathur/setup-php@v2
+                with:
+                    php-version: ${{ matrix.php }}
+                    ini-values: date.timezone=UTC
+                    tools: symfony-cli, castor
+
+            -   name: Set project php-version
+                run: |
+                    echo "${{ matrix.php }}" > .php-version
+
+            -   name: Download WKHTMLTOPDF
+                run: |
+                    mkdir ~/wkhtmltox
+                    wget -O ~/wkhtmltox/wkhtmltox.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.jammy_amd64.deb
+
+            -   name: Install WKHTMLTOPDF
+                run: |
+                    sudo apt install ~/wkhtmltox/wkhtmltox.deb
+
+            -   name: Composer Github Auth
+                run: composer config -g github-oauth.github.com ${{ github.token }}
+
+            -   run: make install
+
+            -   uses: symfonycorp/security-checker-action@v5
+                with:
+                    lock: apps/sylius/composer.lock
+
+            # -   run: make test.all # If you have tests, you can run it here
+
+            -   name: Prepare deployment artifact
+                if: ${{ github.ref_name == vars.PRODUCTION_BRANCH || github.ref_name == vars.STAGING_BRANCH }}
+                # Prepare artifact, then add a copy in a folder for S3 upload with name of the branch in artifact file name
+                run: |
+                    rm -rf apps/sylius/var/{cache,log} apps/sylius/public/media
+                    tar --exclude-vcs --exclude node_modules -cvzf ~/application.tgz ./apps/sylius ./clevercloud
+                    mkdir -p ~/artifact/
+                    cp ~/application.tgz ~/artifact/${{ github.ref_name }}-application.tgz
+
+            -   name: Upload deployment artifact
+                if: ${{ github.ref_name == vars.PRODUCTION_BRANCH || github.ref_name == vars.STAGING_BRANCH }}
+                uses: actions/upload-artifact@v4
+                with:
+                    name: application
+                    path: ~/application.tgz
+
+            -   name: Upload to Cellar Storage
+                if: ${{ github.ref_name == vars.PRODUCTION_BRANCH || github.ref_name == vars.STAGING_BRANCH }}
+                uses: shallwefootball/s3-upload-action@master
+                with:
+                    aws_key_id: ${{secrets.CELLAR_ACCESS_KEY}}
+                    aws_secret_access_key: ${{secrets.CELLAR_SECRET_KEY}}
+                    aws_bucket: ${{ secrets.CELLAR_BUCKET }}
+                    endpoint: ${{ secrets.CELLAR_ENDPOINT }}
+                    source_dir: ../../../artifact/ # Folder where we set the copy or the artifact for S3 upload
+                    destination_dir: ${{ matrix.app }} # Name of the app in cellar storage
+
+            # For debugging purposes, you can uncomment the following lines to set up an interactive session
+            # -   name: Setup upterm session
+            #     uses: lhotari/action-upterm@v1
+            #     if: ${{ failure() }}
+            #     with:
+            #         ## If no one connects after 5 minutes, shut down server.
+            #         wait-timeout-minutes: 5
