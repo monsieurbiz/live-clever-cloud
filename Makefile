@@ -115,6 +115,10 @@ env:
 	clever env --app "${APP_ID}" set ARTIFACT_URL "s3://${CELLAR_BUCKET_NAME}/sylius/main-application.tgz"
 .PHONY: env
 
+deploy:
+	clever deploy
+.PHONY: deploy
+
 destroy:
 # Delete application
 	clever delete -a "${APP_ALIAS}" --yes

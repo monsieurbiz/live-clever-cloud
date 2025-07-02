@@ -50,7 +50,7 @@ make setup
 
 You can use `make destroy` to delete the application and its addons.
 
-To setup all the environment variables, run:
+To configure all the environment variables, run:
 ```bash
 make env
 ```

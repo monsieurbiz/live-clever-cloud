@@ -1,0 +1,5 @@
+[default]
+access_key = ${CELLAR_KEY_ID}
+secret_key = ${CELLAR_KEY_SECRET}
+host_base = ${CELLAR_HOST}
+host_bucket = %(bucket)s.${CELLAR_HOST}
