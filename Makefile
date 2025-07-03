@@ -28,7 +28,7 @@ install:
 # Theme
 	(cd apps/sylius; yarn install) # Node version 20 || 22 - See https://docs.sylius.com/the-book/installation/system-requirements
 	(cd apps/sylius; yarn encore prod) # Node version 20 || 22 - See https://docs.sylius.com/the-book/installation/system-requirements
-	# Sylius fixtures
+# Sylius fixtures
 	(cd apps/sylius && symfony console sylius:fixtures:load -n)
 # Sylius assets
 	(cd apps/sylius && symfony console sylius:install:assets)
